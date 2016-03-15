@@ -1,0 +1,113 @@
+---
+title: "PracMachLearnProject"
+author: "jhn316"
+date: "March 15, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Overview of the task
+Accelerometers are attached onto 6 different study participants doing weight-lifting exercises on their on the belt, forearm, arm, and dumbell.
+The weight lifing exercises are performed in 5 different ways categorized as classes A,B,C,D and E. The goal is to see if we can bulid a model based on the accelerometer data that will tell us in which way (i.e. A,B,C,D or E) the exercise is being performed. 
+
+
+### Load the required packages
+```{r}
+library(caret)
+library(Amelia)
+```
+
+### Load the data into R accounting for missing values
+```{r}
+dat.train = read.csv("pml-training.csv", na.strings=c("NA","#DIV/0!",""))
+dat.test = read.csv("pml-testing.csv", na.strings=c("NA","#DIV/0!",""))
+```
+
+## Preparing the data 
+Prior to applying any machine learning algorithm, the raw data can be
+cleaned up by removing predictors with large amounts of missng values,
+non-zero variances, as well as removing those predictors which obviously
+have no predictive power in this instance such as time stamps.
+
+### Remove the near zero variance columns data
+```{r}
+novar <- nearZeroVar(dat.train, saveMetrics=TRUE)
+dat.train <- dat.train[,novar$nzv==FALSE]
+```
+
+### Remove the columns with missing values
+```{r}
+NAcols <- sapply(dat.train, function(x)sum(is.na(x)))==0  
+dat.train <- dat.train[,NAcols]
+```
+
+### Visualize if there are missing values
+The missmap function is a good way of visualizing missing values.
+In the figures below, missing values would show up in yellow and
+present values in black. As can be seen, there are no more missing values
+in the set of predictors which we are left with after cleaning up.
+```{r}
+missmap(dat.train, main="PML-Missings Map", 
+        col=c("yellow", "black"), legend=FALSE)
+```
+
+We then manually remove the columns which are obviously not useful in 
+predicting, namely the first 5 columns.
+```{r}
+dat.train <- dat.train[,-(1:5)]
+```
+
+
+## Create a training and a test set 
+We partition the pml-training data into a training and test set with a 60%:40% split.
+```{r}
+inTrain <- createDataPartition(dat.train$classe, p=0.6, list=FALSE)
+train.set <- dat.train[inTrain, ]
+test.set <- dat.train[-inTrain, ]
+```
+
+## Model building 
+We build a model on the train.set using 5 fold cross-validation.
+and then we run a random forest algorithm.
+```{r}
+crossvalid <- trainControl(method="cv", number=5, verboseIter=FALSE)
+model1 <- train(classe ~ ., data=train.set, method="rf", trControl=crossvalid)
+```
+
+We then explore the final model to see the results. 
+```{r}
+model1$finalModel
+```
+This model has pretty good classification error rates.
+
+## Model evaluation- test set error 
+Using the model we have trained abouve, we predict on the 
+test data to estimate the out of sample error.
+```{r}
+test.pred <- predict(model1, newdata=test.set)
+confusionMatrix(test.set$classe, test.pred)
+```
+We see that the prediction accuracy is 99.8% which is a very 
+good level off accuracy. So I decided to keep this model.
+
+
+## Predicting using the model. 
+We first format the new test set data to contain the same predictors that
+were used to bulid the model before we apply the model.
+
+## Remove predictors. 
+```{r}
+predictors <- colnames(train.set)
+length(predictors)
+predictors <- predictors[-54]
+dat.test <- dat.test[predictors]
+```
+
+## Predict on the new data
+```{r}
+predictions.new <- predict(model1, newdata=dat.test)
+predictions.new
+```
